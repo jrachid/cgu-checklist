@@ -85,11 +85,26 @@ POINTS = [
 ]
 
 
+
+class DocumentTooLong(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Paragraph:
+    text: str
+    quote: str
+
+
+def extract(html: str) -> str:
+    return trafilatura.extract(html, include_tables=True) or ""
+
+
 def load_text(source: str) -> str:
     if Path(source).exists():
         return Path(source).read_text()
     html = httpx.get(source, follow_redirects=True, timeout=30, headers={"User-Agent": "Mozilla/5.0"}).text
-    text = trafilatura.extract(html, include_tables=True)
+    text = extract(html)
     if not text:
         sys.exit(f"Aucun texte exploitable extrait de {source}")
     return text
@@ -103,20 +118,23 @@ def is_heading(line: str) -> bool:
     )
 
 
-def paragraphs(text: str) -> list[str]:
-    lines, heading = [], []
+def paragraphs(text: str) -> list[Paragraph]:
+    paras, heading = [], []
     for line in (raw.strip() for raw in text.splitlines()):
         if not line:
             continue
         if is_heading(line):
             heading.append(line)
             continue
-        lines.append(" — ".join([*heading, line]))
+        paras.append(Paragraph(" — ".join([*heading, line]), line))
         heading = []
     if heading:
-        lines.append(" — ".join(heading))
-    size = math.ceil(len(lines) / MAX_PARAGRAPHS)
-    return [" ".join(lines[i : i + size]) for i in range(0, len(lines), size)]
+        paras.append(Paragraph(" — ".join(heading), heading[-1]))
+    size = math.ceil(len(paras) / MAX_PARAGRAPHS)
+    return [
+        Paragraph(" ".join(p.text for p in paras[i : i + size]), paras[i].quote)
+        for i in range(0, len(paras), size)
+    ]
 
 
 def pid(i: int) -> str:
@@ -143,11 +161,11 @@ def questions(ids: list[str]) -> dict:
     return qs
 
 
-def ask_jev(paras: list[str]) -> dict:
-    document = "\n".join(f"{pid(i)}| {p}" for i, p in enumerate(paras))
+def ask_jev(paras: list[Paragraph]) -> dict:
+    document = "\n".join(f"{pid(i)}| {p.text}" for i, p in enumerate(paras))
     # Estimation grossière : le français tourne autour de 3,5 caractères par token.
     if len(document) / 3.5 > MAX_STATE_TOKENS:
-        sys.exit(f"Document trop long pour une seule requête (~{len(document) / 3.5:.0f} tokens) : il faudrait le découper")
+        raise DocumentTooLong(f"~{len(document) / 3.5:.0f} tokens")
     response = httpx.post(
         API_URL,
         headers={"Authorization": f"Bearer {os.environ['TYPESAFE_API_KEY']}"},
@@ -163,26 +181,60 @@ def ask_jev(paras: list[str]) -> dict:
 
 
 def verdict(answer: dict) -> str:
-    prob = answer["probabilities"][answer["choice"]]
-    if prob < CONFIDENT:
-        return "⚠️ "
-    return {"yes": "✅", "no": "❌", "not_mentioned": "➖"}[answer["choice"]]
+    if answer["probabilities"][answer["choice"]] < CONFIDENT:
+        return "unsure"
+    return answer["choice"]
+
+
+def analyze(text: str) -> dict:
+    """analyze lève DocumentTooLong si le texte dépasse le contexte de Jev."""
+    paras = paragraphs(text)
+    result = ask_jev(paras)
+    answers = result["answers"]
+    points = []
+    for p in POINTS:
+        answer, where = answers[p.key], answers[f"{p.key}__where"]
+        citation = None
+        if answer["choice"] != "not_mentioned" and where["choice"] != "NONE":
+            para = paras[int(where["choice"][1:])]
+            citation = {
+                "id": where["choice"],
+                "probability": where["probabilities"][where["choice"]],
+                "text": para.text,
+                "quote": para.quote,
+            }
+        points.append(
+            {
+                "key": p.key,
+                "label": p.label,
+                "verdict": verdict(answer),
+                "probabilities": answer["probabilities"],
+                "citation": citation,
+            }
+        )
+    return {
+        "model": result["model"],
+        "input_tokens": result["usage"]["input_tokens"],
+        "paragraphs": len(paras),
+        "points": points,
+    }
+
+
+ICONS = {"yes": "✅", "no": "❌", "not_mentioned": "➖", "unsure": "⚠️ "}
 
 
 def main() -> None:
     if len(sys.argv) != 2:
         sys.exit("Usage : cgu-checklist <url-ou-fichier>")
-    paras = paragraphs(load_text(sys.argv[1]))
-    result = ask_jev(paras)
-    answers = result["answers"]
+    try:
+        result = analyze(load_text(sys.argv[1]))
+    except DocumentTooLong as e:
+        sys.exit(f"Document trop long pour une seule requête ({e}) : il faudrait le découper")
 
-    print(f"\n{len(paras)} paragraphes analysés — {result['usage']['input_tokens']} tokens ({result['model']})\n")
-    for p in POINTS:
-        a = answers[p.key]
-        probs = " ".join(f"{k}={v:.2f}" for k, v in a["probabilities"].items())
-        print(f"{verdict(a)}  {p.label}   [{probs}]")
-        where = answers[f"{p.key}__where"]
-        if a["choice"] != "not_mentioned" and where["choice"] != "NONE":
-            excerpt = paras[int(where["choice"][1:])]
-            print(f"      ↳ {where['choice']} ({where['probabilities'][where['choice']]:.2f}) « {excerpt[:220]}{'…' if len(excerpt) > 220 else ''} »")
+    print(f"\n{result['paragraphs']} paragraphes analysés — {result['input_tokens']} tokens ({result['model']})\n")
+    for point in result["points"]:
+        probs = " ".join(f"{k}={v:.2f}" for k, v in point["probabilities"].items())
+        print(f"{ICONS[point['verdict']]}  {point['label']}   [{probs}]")
+        if c := point["citation"]:
+            print(f"      ↳ {c['id']} ({c['probability']:.2f}) « {c['text'][:220]}{'…' if len(c['text']) > 220 else ''} »")
     print()
