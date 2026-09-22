@@ -12,7 +12,6 @@ import trafilatura
 API_URL = "https://api.typesafe.ai/v1/systemone"
 MAX_PARAGRAPHS = 254
 MAX_HEADING_LENGTH = 90
-MAX_STATE_TOKENS = 30_000
 CONFIDENT = 0.7
 
 
@@ -163,9 +162,6 @@ def questions(ids: list[str]) -> dict:
 
 def ask_jev(paras: list[Paragraph]) -> dict:
     document = "\n".join(f"{pid(i)}| {p.text}" for i, p in enumerate(paras))
-    # Estimation grossière : le français tourne autour de 3,5 caractères par token.
-    if len(document) / 3.5 > MAX_STATE_TOKENS:
-        raise DocumentTooLong(f"~{len(document) / 3.5:.0f} tokens")
     response = httpx.post(
         API_URL,
         headers={"Authorization": f"Bearer {os.environ['TYPESAFE_API_KEY']}"},
@@ -176,6 +172,10 @@ def ask_jev(paras: list[Paragraph]) -> dict:
         },
         timeout=120,
     )
+    if response.status_code == 400:
+        detail = response.json().get("detail")
+        if isinstance(detail, dict) and detail.get("error_type") == "max_tokens_exceeded":
+            raise DocumentTooLong(f"{len(document)} caractères")
     response.raise_for_status()
     return response.json()
 

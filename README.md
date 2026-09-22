@@ -53,7 +53,7 @@ uv run cgu-checklist cgu.txt
 
 - **Les données personnelles sont souvent ailleurs.** Beaucoup de services décrivent l'usage des données dans une politique de confidentialité séparée, que l'outil ne lit pas encore : ces points ressortent alors « non mentionné ».
 - **Le français est une langue secondaire pour Jev**, entraîné surtout en anglais. Les questions sont posées en anglais sur un texte français ; les résultats sont à valider sur davantage de documents.
-- **Les documents très longs** (au-delà de 30 000 tokens environ) sont refusés plutôt que découpés.
+- **Les documents très longs**, au-delà de ce que Jev accepte en une requête (environ 32 000 tokens, soit 20 000 à 25 000 mots), sont refusés plutôt que découpés.
 - Plusieurs sites (BlaBlaCar, Vinted, Doctolib) refusent les téléchargements automatiques.
 
 ## L'extension Chrome
