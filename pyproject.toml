@@ -1,8 +1,9 @@
 [project]
 name = "cgu-checklist"
 version = "0.1.0"
-description = "Add your description here"
+description = "Check-list des points cruciaux des CGU, analysés par Jev"
 readme = "README.md"
+license = "MIT"
 authors = [
     { name = "Rachid Jeffali", email = "rachidj@protonmail.ch" }
 ]
