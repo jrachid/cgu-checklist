@@ -27,7 +27,7 @@ function clauseUrl(documentUrl: string, quote: string): string {
 function renderPoint(point: Point): HTMLElement {
   const summary = el('span', 'label', point.label);
   const icon = el('span', 'icon', ICONS[point.verdict]);
-  if (!point.citation) {
+  if (point.citations.length === 0) {
     const row = el('div', `point ${point.verdict}`);
     row.append(icon, summary);
     return row;
@@ -35,12 +35,15 @@ function renderPoint(point: Point): HTMLElement {
   const details = el('details', `point ${point.verdict}`);
   const head = el('summary');
   head.append(icon, summary);
-  const quote = el('blockquote', undefined, point.citation.text);
-  const link = el('a', 'source', `Voir la clause (${new URL(point.citation.url).pathname}) ↗`);
-  link.href = clauseUrl(point.citation.url, point.citation.quote);
-  link.target = '_blank';
-  link.rel = 'noopener';
-  details.append(head, quote, link);
+  details.append(head);
+  for (const citation of point.citations) {
+    const quote = el('blockquote', undefined, citation.text);
+    const link = el('a', 'source', `Voir la clause (${new URL(citation.url).pathname}) ↗`);
+    link.href = clauseUrl(citation.url, citation.quote);
+    link.target = '_blank';
+    link.rel = 'noopener';
+    details.append(quote, link);
+  }
   return details;
 }
 

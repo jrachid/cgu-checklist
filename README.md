@@ -20,7 +20,7 @@ Personne ne lit les conditions générales d'utilisation avant de cliquer sur «
 L'analyse repose sur [Jev](https://docs.typesafe.ai), le modèle de TypeSafe. Jev ne rédige pas de texte : il répond à des questions typées avec des probabilités, ce qui permet au code de décider seul de ce qu'il affiche.
 
 1. Le texte est extrait de la page (avec [trafilatura](https://trafilatura.readthedocs.io)), puis découpé en paragraphes numérotés `P000`, `P001`… Chaque titre d'article est rattaché au paragraphe qui le suit.
-2. Chaque point de la check-list donne lieu à deux questions : la réponse (oui, non explicitement, non mentionné) et le paragraphe qui la justifie.
+2. Chaque point de la check-list donne lieu à deux questions : la réponse (oui, non explicitement, non mentionné) et le paragraphe qui la justifie. Quand Jev répartit sa probabilité entre plusieurs paragraphes, jusqu'à trois sont cités.
 3. Les 16 questions partent dans **une seule requête** : Jev les évalue en parallèle, en 3 secondes environ, pour à peu près 0,001 $ par document.
 4. Quand plusieurs documents sont fournis, typiquement les CGU et la politique de confidentialité, chacun est analysé à part ; pour chaque point, on garde le document qui y répond le plus nettement, et deux réponses opposées donnent ⚠️.
 
@@ -29,7 +29,7 @@ L'analyse repose sur [Jev](https://docs.typesafe.ai), le modèle de TypeSafe. Je
 | ✅ | le texte autorise ce point (probabilité ≥ 0,7) |
 | ❌ | le texte l'exclut explicitement |
 | ➖ | le texte n'en parle pas |
-| ⚠️ | Jev hésite : à vérifier soi-même |
+| ⚠️ | Jev hésite, ou tranche sans trouver de clause qui le justifie : à vérifier soi-même |
 
 « Non mentionné » est distinct de « non » : des CGU muettes sur un sujet ne l'interdisent pas pour autant.
 

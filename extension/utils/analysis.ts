@@ -14,7 +14,7 @@ export interface Point {
   verdict: Verdict;
   probabilities: Record<string, number>;
   source: string;
-  citation: Citation | null;
+  citations: Citation[];
 }
 
 export interface AnalyzedDocument {

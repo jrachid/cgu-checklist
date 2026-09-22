@@ -13,6 +13,9 @@ API_URL = "https://api.typesafe.ai/v1/systemone"
 MAX_PARAGRAPHS = 254
 MAX_HEADING_LENGTH = 90
 CONFIDENT = 0.7
+NO_EVIDENCE = 0.5
+MAX_CITATIONS = 3
+MIN_CITATION = 0.15
 
 
 @dataclass(frozen=True)
@@ -180,10 +183,25 @@ def ask_jev(paras: list[Paragraph]) -> dict:
     return response.json()
 
 
-def verdict(answer: dict) -> str:
+def verdict(answer: dict, where: dict) -> str:
+    """verdict rend unsure quand Jev hésite, ou quand il tranche sans trouver de paragraphe qui le justifie."""
     if answer["probabilities"][answer["choice"]] < CONFIDENT:
         return "unsure"
+    if answer["choice"] != "not_mentioned" and where["probabilities"]["NONE"] >= NO_EVIDENCE:
+        return "unsure"
     return answer["choice"]
+
+
+def citations(where: dict, paras: list[Paragraph]) -> list[dict]:
+    ranked = sorted(
+        ((pid_, prob) for pid_, prob in where["probabilities"].items() if pid_ != "NONE"),
+        key=lambda item: -item[1],
+    )
+    kept = [item for item in ranked[:MAX_CITATIONS] if item[1] >= MIN_CITATION] or ranked[:1]
+    return [
+        {"id": pid_, "probability": prob, "text": paras[int(pid_[1:])].text, "quote": paras[int(pid_[1:])].quote}
+        for pid_, prob in kept
+    ]
 
 
 def analyze(text: str) -> dict:
@@ -194,22 +212,13 @@ def analyze(text: str) -> dict:
     points = []
     for p in POINTS:
         answer, where = answers[p.key], answers[f"{p.key}__where"]
-        citation = None
-        if answer["choice"] != "not_mentioned" and where["choice"] != "NONE":
-            para = paras[int(where["choice"][1:])]
-            citation = {
-                "id": where["choice"],
-                "probability": where["probabilities"][where["choice"]],
-                "text": para.text,
-                "quote": para.quote,
-            }
         points.append(
             {
                 "key": p.key,
                 "label": p.label,
-                "verdict": verdict(answer),
+                "verdict": verdict(answer, where),
                 "probabilities": answer["probabilities"],
-                "citation": citation,
+                "citations": [] if answer["choice"] == "not_mentioned" else citations(where, paras),
             }
         )
     return {
@@ -238,8 +247,7 @@ def combine(analyses: list[tuple[str, dict]]) -> dict:
         best = max(candidates, key=strength)
         if {"yes", "no"} <= {c["verdict"] for c in candidates}:
             best = {**best, "verdict": "unsure"}
-        if best["citation"]:
-            best = {**best, "citation": {**best["citation"], "url": best["source"]}}
+        best = {**best, "citations": [{**c, "url": best["source"]} for c in best["citations"]]}
         points.append(best)
     return {
         "documents": [
@@ -268,7 +276,7 @@ def main() -> None:
     for point in result["points"]:
         probs = " ".join(f"{k}={v:.2f}" for k, v in point["probabilities"].items())
         print(f"{ICONS[point['verdict']]}  {point['label']}   [{probs}]")
-        if c := point["citation"]:
+        for c in point["citations"]:
             excerpt = f"{c['text'][:220]}{'…' if len(c['text']) > 220 else ''}"
             print(f"      ↳ {Path(c['url']).name} {c['id']} ({c['probability']:.2f}) « {excerpt} »")
     print()
