@@ -22,10 +22,11 @@ function isPrivacyLink(link: HTMLAnchorElement): boolean {
   return PRIVACY.test(link.textContent ?? '') || PRIVACY.test(link.pathname);
 }
 
+// Un lien qui nomme les CGU en est un, même s'il cite aussi la confidentialité (« Terms of Use and … Privacy Statement »).
 function isTermsLink(link: HTMLAnchorElement): boolean {
   const text = link.textContent ?? '';
-  if (PRIVACY.test(text)) return false;
-  return TERMS_TEXT.test(text) || (TERMS_HREF.test(link.pathname) && !PRIVACY.test(link.pathname));
+  if (TERMS_TEXT.test(text)) return true;
+  return TERMS_HREF.test(link.pathname) && !isPrivacyLink(link);
 }
 
 function acceptanceSentenceOf(link: HTMLAnchorElement): Element | null {
@@ -44,7 +45,7 @@ export function findConsentSpot(root: ParentNode = document): ConsentSpot | null
     const sentence = acceptanceSentenceOf(link);
     if (sentence) {
       const privacy = [...sentence.querySelectorAll<HTMLAnchorElement>('a[href]')].find(
-        (other) => other.href.startsWith('http') && isPrivacyLink(other),
+        (other) => other !== link && other.href.startsWith('http') && isPrivacyLink(other),
       );
       return {
         termsUrl: withoutHash(link.href),
