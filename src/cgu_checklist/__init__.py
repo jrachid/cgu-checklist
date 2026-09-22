@@ -11,6 +11,7 @@ import trafilatura
 
 API_URL = "https://api.typesafe.ai/v1/systemone"
 MAX_PARAGRAPHS = 254
+MAX_HEADING_LENGTH = 90
 MAX_STATE_TOKENS = 30_000
 CONFIDENT = 0.7
 
@@ -94,8 +95,26 @@ def load_text(source: str) -> str:
     return text
 
 
+def is_heading(line: str) -> bool:
+    return (
+        len(line) <= MAX_HEADING_LENGTH
+        and not line.startswith(("-", "–", "•", "*"))
+        and not line.endswith((".", ",", ";", ":", "!", "?", "»", ")"))
+    )
+
+
 def paragraphs(text: str) -> list[str]:
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    lines, heading = [], []
+    for line in (raw.strip() for raw in text.splitlines()):
+        if not line:
+            continue
+        if is_heading(line):
+            heading.append(line)
+            continue
+        lines.append(" — ".join([*heading, line]))
+        heading = []
+    if heading:
+        lines.append(" — ".join(heading))
     size = math.ceil(len(lines) / MAX_PARAGRAPHS)
     return [" ".join(lines[i : i + size]) for i in range(0, len(lines), size)]
 
