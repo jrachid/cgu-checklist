@@ -62,7 +62,9 @@ uv run cgu-checklist https://typesafe.ai/legal/terms https://typesafe.ai/legal/p
 
 L'extension, construite avec [WXT](https://wxt.dev), repère un lien vers des CGU placé dans une phrase d'acceptation (« J'accepte les conditions… », « En vous inscrivant, vous acceptez… ») et affiche la check-list juste en dessous. Si la même phrase renvoie à la politique de confidentialité, celle-ci est analysée avec les CGU. Un clic sur un point déplie la clause citée ; « Voir la clause » ouvre les CGU directement surlignées sur ce passage.
 
-La page des CGU est téléchargée par le navigateur, ce qui évite les blocages rencontrés depuis un serveur. Son HTML est envoyé au serveur d'analyse local, qui seul détient la clé d'API.
+La page des CGU est téléchargée par le navigateur, ce qui évite les blocages rencontrés depuis un serveur. Son HTML et la liste de ses liens sont envoyés au serveur d'analyse local, qui seul détient la clé d'API.
+
+Le lien d'une phrase d'acceptation ne mène pas toujours au contrat. Chez GitLab, il ouvre une page de renvoi, puis un sommaire de quinze accords. Dans la même requête que la check-list, Jev juge donc si la page est un contrat ou un renvoi, et dans ce cas désigne le lien vers l'accord principal et celui vers la politique de confidentialité. L'extension les suit, sur deux niveaux au plus.
 
 ```bash
 # 1. le serveur d'analyse, sur http://127.0.0.1:8787

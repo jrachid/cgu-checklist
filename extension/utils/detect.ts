@@ -12,7 +12,7 @@ export interface ConsentSpot {
   anchor: Element;
 }
 
-function withoutHash(href: string): string {
+export function withoutHash(href: string): string {
   const url = new URL(href);
   url.hash = '';
   return url.href;

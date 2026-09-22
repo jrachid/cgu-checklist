@@ -65,6 +65,10 @@ function renderPanel(container: HTMLElement, onClose: () => void) {
       body.append(el('p', 'error', response.error));
       return;
     }
+    if (response.analysis.points.length === 0) {
+      body.append(el('p', 'error', "Les liens mènent à des pages de renvoi, sans trouver le contrat lui-même."));
+      return;
+    }
     for (const point of response.analysis.points) body.append(renderPoint(point));
     body.append(el('p', 'legend', '✅ autorisé · ❌ exclu · ➖ non mentionné · ⚠️ à vérifier soi-même'));
   };

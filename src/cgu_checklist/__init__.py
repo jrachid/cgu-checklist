@@ -16,6 +16,8 @@ CONFIDENT = 0.7
 NO_EVIDENCE = 0.5
 MAX_CITATIONS = 3
 MIN_CITATION = 0.15
+IS_CONTRACT = 0.5
+MAX_LINKS = 254
 
 
 @dataclass(frozen=True)
@@ -114,8 +116,15 @@ class Paragraph:
     quote: str
 
 
+@dataclass(frozen=True)
+class Link:
+    text: str
+    href: str
+
+
 def extract(html: str) -> str:
-    return trafilatura.extract(html, include_tables=True) or ""
+    # trafilatura.extract écarte les pages trop courtes pour ressembler à un article, comme les pages de renvoi.
+    return trafilatura.extract(html, include_tables=True) or trafilatura.html2txt(html) or ""
 
 
 def load_text(source: str) -> str:
@@ -159,8 +168,40 @@ def pid(i: int) -> str:
     return f"P{i:03d}"
 
 
-def questions(ids: list[str]) -> dict:
-    qs = {}
+def lid(i: int) -> str:
+    return f"L{i:03d}"
+
+
+def routing_questions(link_ids: list[str]) -> dict:
+    options = {**{i: None for i in link_ids}, "NONE": "No link leads to such a document"}
+    return {
+        "is_contract": {
+            "type": "noul",
+            "instructions": "Is `cgu` itself a legal agreement or policy, such as terms of use or a privacy policy, that states its actual clauses?",
+            "criteria": {
+                "true": "The page contains the substantive clauses of the agreement or policy",
+                "false": "The page mainly points to other documents: an index of agreements, a short notice or a redirect page",
+            },
+        },
+        "follow_terms": {
+            "type": "choice",
+            "instructions": {
+                "question": "Which entry of `links` leads to the main agreement that governs an individual's use of this service and their account?",
+                "prefer": "The core contract a user is bound to by signing up, even on a free plan: often called terms of service, terms of use, user agreement or subscription agreement",
+                "avoid": "Supplementary documents such as an acceptable use policy, community guidelines or cookie policy; terms that only cover browsing the marketing website; legacy or superseded versions",
+            },
+            "criteria": options,
+        },
+        "follow_privacy": {
+            "type": "choice",
+            "instructions": "Which entry of `links` leads to the privacy policy or privacy statement that applies to individual users of this service?",
+            "criteria": options,
+        },
+    }
+
+
+def questions(ids: list[str], link_ids: list[str]) -> dict:
+    qs = routing_questions(link_ids) if link_ids else {}
     for p in POINTS:
         qs[p.key] = {
             "type": "choice",
@@ -179,15 +220,18 @@ def questions(ids: list[str]) -> dict:
     return qs
 
 
-def ask_jev(paras: list[Paragraph]) -> dict:
+def ask_jev(paras: list[Paragraph], links: list[Link]) -> dict:
     document = "\n".join(f"{pid(i)}| {p.text}" for i, p in enumerate(paras))
+    state = {"cgu": document}
+    if links:
+        state["links"] = "\n".join(f"{lid(i)}| {link.text} → {link.href}" for i, link in enumerate(links))
     response = httpx.post(
         API_URL,
         headers={"Authorization": f"Bearer {os.environ['TYPESAFE_API_KEY']}"},
         json={
             "model": "jev-latest",
-            "state": {"cgu": document},
-            "questions": questions([pid(i) for i in range(len(paras))]),
+            "state": state,
+            "questions": questions([pid(i) for i in range(len(paras))], [lid(i) for i in range(len(links))]),
         },
         timeout=120,
     )
@@ -221,11 +265,20 @@ def citations(where: dict, paras: list[Paragraph]) -> list[dict]:
     ]
 
 
-def analyze(text: str) -> dict:
-    """analyze lève DocumentTooLong si le texte dépasse le contexte de Jev."""
+def links_to_follow(answers: dict, links: list[Link]) -> list[str]:
+    chosen = (answers[q]["choice"] for q in ("follow_terms", "follow_privacy"))
+    return list(dict.fromkeys(links[int(c[1:])].href for c in chosen if c != "NONE"))
+
+
+def analyze(text: str, links: list[Link] | None = None) -> dict:
+    """analyze rend kind="relay" et les liens à suivre quand la page renvoie ailleurs ; lève DocumentTooLong si le texte dépasse le contexte de Jev."""
     paras = paragraphs(text)
-    result = ask_jev(paras)
+    links = (links or [])[:MAX_LINKS]
+    result = ask_jev(paras, links)
     answers = result["answers"]
+    usage = {"model": result["model"], "input_tokens": result["usage"]["input_tokens"], "paragraphs": len(paras)}
+    if links and answers["is_contract"]["noul"] < IS_CONTRACT and (follow := links_to_follow(answers, links)):
+        return {**usage, "kind": "relay", "follow": follow, "points": []}
     points = []
     for p in POINTS:
         answer, where = answers[p.key], answers[f"{p.key}__where"]
@@ -238,12 +291,7 @@ def analyze(text: str) -> dict:
                 "citations": [] if answer["choice"] == "not_mentioned" else citations(where, paras),
             }
         )
-    return {
-        "model": result["model"],
-        "input_tokens": result["usage"]["input_tokens"],
-        "paragraphs": len(paras),
-        "points": points,
-    }
+    return {**usage, "kind": "contract", "follow": [], "points": points}
 
 
 RANK = {"yes": 2, "no": 2, "unsure": 1, "not_mentioned": 0}
@@ -255,11 +303,12 @@ def strength(point: dict) -> tuple[int, float]:
 
 
 def combine(analyses: list[tuple[str, dict]]) -> dict:
-    """combine garde, pour chaque point, le document qui y répond le plus nettement ; deux réponses opposées donnent unsure."""
+    """combine garde, pour chaque point, le contrat qui y répond le plus nettement ; deux réponses opposées donnent unsure."""
+    contracts = [(url, analysis) for url, analysis in analyses if analysis["kind"] == "contract"]
     points = []
-    for i in range(len(POINTS)):
+    for i in range(len(POINTS) if contracts else 0):
         candidates = [
-            {**analysis["points"][i], "source": url} for url, analysis in analyses
+            {**analysis["points"][i], "source": url} for url, analysis in contracts
         ]
         best = max(candidates, key=strength)
         if {"yes", "no"} <= {c["verdict"] for c in candidates}:
@@ -268,9 +317,10 @@ def combine(analyses: list[tuple[str, dict]]) -> dict:
         points.append(best)
     return {
         "documents": [
-            {"url": url, **{k: analysis[k] for k in ("model", "input_tokens", "paragraphs")}}
+            {"url": url, **{k: analysis[k] for k in ("model", "input_tokens", "paragraphs", "kind", "follow")}}
             for url, analysis in analyses
         ],
+        "follow": list(dict.fromkeys(link for _, analysis in analyses for link in analysis["follow"])),
         "points": points,
     }
 

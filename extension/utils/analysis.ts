@@ -22,16 +22,35 @@ export interface AnalyzedDocument {
   model: string;
   input_tokens: number;
   paragraphs: number;
+  kind: 'contract' | 'relay';
+  follow: string[];
 }
 
 export interface Analysis {
   documents: AnalyzedDocument[];
+  follow: string[];
   points: Point[];
 }
 
 export interface AnalyzeRequest {
   type: 'analyze';
   urls: string[];
+}
+
+export interface InspectRequest {
+  type: 'inspect';
+  url: string;
+  html: string;
+}
+
+export interface PageLink {
+  text: string;
+  href: string;
+}
+
+export interface InspectResult {
+  html: string;
+  links: PageLink[];
 }
 
 export type AnalyzeResponse = { ok: true; analysis: Analysis } | { ok: false; error: string };
