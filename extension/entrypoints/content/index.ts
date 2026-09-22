@@ -95,8 +95,13 @@ export default defineContentScript({
       });
       ui.mount();
       const urls = spot.privacyUrl ? [spot.termsUrl, spot.privacyUrl] : [spot.termsUrl];
-      const response: AnalyzeResponse = await browser.runtime.sendMessage({ type: 'analyze', urls });
-      if (ctx.isValid) fill(response);
+      const response: AnalyzeResponse = await browser.runtime
+        .sendMessage({ type: 'analyze', urls })
+        .catch(() => ({
+          ok: false,
+          error: "Le script de fond de l'extension ne répond pas : si elle vient d'être rechargée, recharge aussi cette page.",
+        }));
+      if (ctx.isValid) fill(response ?? { ok: false, error: "Le script de fond de l'extension n'a rien renvoyé." });
     };
 
     // Les formulaires d'inscription apparaissent souvent après le chargement (pages dynamiques, fenêtres modales).

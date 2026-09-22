@@ -1,4 +1,5 @@
 import type { AnalyzeRequest, AnalyzeResponse } from '@/utils/analysis';
+import { describeError } from '@/utils/errors';
 
 const API_URL = import.meta.env.WXT_API_URL ?? 'http://127.0.0.1:8787';
 
@@ -29,7 +30,7 @@ async function analyze(urls: string[]): Promise<AnalyzeResponse> {
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      return { ok: false, error: body.detail ?? `Le serveur d'analyse a répondu ${response.status}` };
+      return { ok: false, error: describeError(response.status, body.detail) };
     }
     return { ok: true, analysis: await response.json() };
   } catch {

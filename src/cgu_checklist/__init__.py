@@ -25,6 +25,7 @@ class Point:
     question: str
     yes: str
     no: str
+    no_from_absence: bool = False
 
 
 POINTS = [
@@ -76,6 +77,21 @@ POINTS = [
         "Do these terms force disputes into arbitration, waive class actions, or impose a court or jurisdiction far from the user?",
         "The terms require arbitration, waive collective actions, or impose a specific foreign or distant jurisdiction",
         "The terms explicitly let the user go to their local courts",
+    ),
+    Point(
+        "arbitration_opt_out",
+        "Vous laisse refuser l'arbitrage",
+        "Can the user opt out of or reject the arbitration agreement, for example by sending a notice within a set period after accepting the terms?",
+        "The terms give the user a way to opt out of or reject arbitration, such as a written notice within a deadline",
+        "The terms make arbitration mandatory with no way for the user to opt out",
+        no_from_absence=True,
+    ),
+    Point(
+        "indemnity",
+        "Vous oblige à l'indemniser",
+        "Do these terms require the user to indemnify or defend the company, paying its losses, damages or legal fees for claims related to the user's use of the service?",
+        "The user must indemnify, defend or hold the company harmless, including covering its legal costs",
+        "The terms explicitly state the user owes the company no indemnification",
     ),
     Point(
         "data_retention",
@@ -183,11 +199,12 @@ def ask_jev(paras: list[Paragraph]) -> dict:
     return response.json()
 
 
-def verdict(answer: dict, where: dict) -> str:
+def verdict(point: Point, answer: dict, where: dict) -> str:
     """verdict rend unsure quand Jev hésite, ou quand il tranche sans trouver de paragraphe qui le justifie."""
     if answer["probabilities"][answer["choice"]] < CONFIDENT:
         return "unsure"
-    if answer["choice"] != "not_mentioned" and where["probabilities"]["NONE"] >= NO_EVIDENCE:
+    needs_clause = answer["choice"] == "yes" or (answer["choice"] == "no" and not point.no_from_absence)
+    if needs_clause and where["probabilities"]["NONE"] >= NO_EVIDENCE:
         return "unsure"
     return answer["choice"]
 
@@ -216,7 +233,7 @@ def analyze(text: str) -> dict:
             {
                 "key": p.key,
                 "label": p.label,
-                "verdict": verdict(answer, where),
+                "verdict": verdict(p, answer, where),
                 "probabilities": answer["probabilities"],
                 "citations": [] if answer["choice"] == "not_mentioned" else citations(where, paras),
             }
