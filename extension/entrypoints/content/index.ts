@@ -14,17 +14,17 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, t
 }
 
 // Un text fragment (#:~:text=) fait défiler la page jusqu'au passage et le surligne ; « - » y est un séparateur.
-function clauseUrl(termsUrl: string, quote: string): string {
+function clauseUrl(documentUrl: string, quote: string): string {
   const words = quote.split(/\s+/);
   const encode = (part: string[]) => encodeURIComponent(part.join(' ')).replace(/-/g, '%2D');
   const range =
     words.length > 2 * FRAGMENT_WORDS
       ? `${encode(words.slice(0, FRAGMENT_WORDS))},${encode(words.slice(-FRAGMENT_WORDS))}`
       : encode(words);
-  return `${termsUrl}#:~:text=${range}`;
+  return `${documentUrl}#:~:text=${range}`;
 }
 
-function renderPoint(point: Point, termsUrl: string): HTMLElement {
+function renderPoint(point: Point): HTMLElement {
   const summary = el('span', 'label', point.label);
   const icon = el('span', 'icon', ICONS[point.verdict]);
   if (!point.citation) {
@@ -36,15 +36,15 @@ function renderPoint(point: Point, termsUrl: string): HTMLElement {
   const head = el('summary');
   head.append(icon, summary);
   const quote = el('blockquote', undefined, point.citation.text);
-  const link = el('a', 'source', 'Voir la clause dans les CGU ↗');
-  link.href = clauseUrl(termsUrl, point.citation.quote);
+  const link = el('a', 'source', `Voir la clause (${new URL(point.citation.url).pathname}) ↗`);
+  link.href = clauseUrl(point.citation.url, point.citation.quote);
   link.target = '_blank';
   link.rel = 'noopener';
   details.append(head, quote, link);
   return details;
 }
 
-function renderPanel(container: HTMLElement, termsUrl: string, onClose: () => void) {
+function renderPanel(container: HTMLElement, onClose: () => void) {
   const panel = el('section', 'panel');
   const header = el('header');
   const title = el('strong', undefined, 'Ce que vous acceptez');
@@ -62,7 +62,7 @@ function renderPanel(container: HTMLElement, termsUrl: string, onClose: () => vo
       body.append(el('p', 'error', response.error));
       return;
     }
-    for (const point of response.analysis.points) body.append(renderPoint(point, termsUrl));
+    for (const point of response.analysis.points) body.append(renderPoint(point));
     body.append(el('p', 'legend', '✅ autorisé · ❌ exclu · ➖ non mentionné · ⚠️ à vérifier soi-même'));
   };
 }
@@ -87,11 +87,12 @@ export default defineContentScript({
         anchor: spot.anchor,
         append: 'after',
         onMount: (container) => {
-          fill = renderPanel(container, spot.termsUrl, () => ui.remove());
+          fill = renderPanel(container, () => ui.remove());
         },
       });
       ui.mount();
-      const response: AnalyzeResponse = await browser.runtime.sendMessage({ type: 'analyze', url: spot.termsUrl });
+      const urls = spot.privacyUrl ? [spot.termsUrl, spot.privacyUrl] : [spot.termsUrl];
+      const response: AnalyzeResponse = await browser.runtime.sendMessage({ type: 'analyze', urls });
       if (ctx.isValid) fill(response);
     };
 

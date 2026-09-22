@@ -2,21 +2,30 @@ import type { AnalyzeRequest, AnalyzeResponse } from '@/utils/analysis';
 
 const API_URL = import.meta.env.WXT_API_URL ?? 'http://127.0.0.1:8787';
 
-async function analyze(url: string): Promise<AnalyzeResponse> {
-  let html: string;
+async function download(url: string): Promise<{ url: string; html: string } | { error: string }> {
   try {
     const page = await fetch(url, { credentials: 'include' });
-    if (!page.ok) return { ok: false, error: `La page des CGU a répondu ${page.status}` };
-    html = await page.text();
+    if (!page.ok) return { error: `${url} a répondu ${page.status}` };
+    return { url, html: await page.text() };
   } catch {
-    return { ok: false, error: 'Impossible de télécharger la page des CGU' };
+    return { error: `Impossible de télécharger ${url}` };
+  }
+}
+
+// analyze échoue seulement si aucun des documents n'a pu être téléchargé.
+async function analyze(urls: string[]): Promise<AnalyzeResponse> {
+  const pages = await Promise.all(urls.map(download));
+  const documents = pages.filter((page) => 'html' in page);
+  if (documents.length === 0) {
+    const failure = pages.find((page) => 'error' in page);
+    return { ok: false, error: failure && 'error' in failure ? failure.error : 'Aucun document à analyser' };
   }
 
   try {
     const response = await fetch(`${API_URL}/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, html }),
+      body: JSON.stringify({ documents }),
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
@@ -30,6 +39,6 @@ async function analyze(url: string): Promise<AnalyzeResponse> {
 
 export default defineBackground(() => {
   browser.runtime.onMessage.addListener((message: AnalyzeRequest) => {
-    if (message.type === 'analyze') return analyze(message.url);
+    if (message.type === 'analyze') return analyze(message.urls);
   });
 });

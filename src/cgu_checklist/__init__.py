@@ -220,21 +220,55 @@ def analyze(text: str) -> dict:
     }
 
 
+RANK = {"yes": 2, "no": 2, "unsure": 1, "not_mentioned": 0}
+
+
+def strength(point: dict) -> tuple[int, float]:
+    probs = point["probabilities"]
+    return RANK[point["verdict"]], max(probs["yes"], probs["no"])
+
+
+def combine(analyses: list[tuple[str, dict]]) -> dict:
+    """combine garde, pour chaque point, le document qui y répond le plus nettement ; deux réponses opposées donnent unsure."""
+    points = []
+    for i in range(len(POINTS)):
+        candidates = [
+            {**analysis["points"][i], "source": url} for url, analysis in analyses
+        ]
+        best = max(candidates, key=strength)
+        if {"yes", "no"} <= {c["verdict"] for c in candidates}:
+            best = {**best, "verdict": "unsure"}
+        if best["citation"]:
+            best = {**best, "citation": {**best["citation"], "url": best["source"]}}
+        points.append(best)
+    return {
+        "documents": [
+            {"url": url, **{k: analysis[k] for k in ("model", "input_tokens", "paragraphs")}}
+            for url, analysis in analyses
+        ],
+        "points": points,
+    }
+
+
 ICONS = {"yes": "✅", "no": "❌", "not_mentioned": "➖", "unsure": "⚠️ "}
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        sys.exit("Usage : cgu-checklist <url-ou-fichier>")
+    if len(sys.argv) < 2:
+        sys.exit("Usage : cgu-checklist <url-ou-fichier> [<url-ou-fichier>…]")
     try:
-        result = analyze(load_text(sys.argv[1]))
+        result = combine([(source, analyze(load_text(source))) for source in sys.argv[1:]])
     except DocumentTooLong as e:
         sys.exit(f"Document trop long pour une seule requête ({e}) : il faudrait le découper")
 
-    print(f"\n{result['paragraphs']} paragraphes analysés — {result['input_tokens']} tokens ({result['model']})\n")
+    print()
+    for doc in result["documents"]:
+        print(f"{doc['url']} : {doc['paragraphs']} paragraphes, {doc['input_tokens']} tokens ({doc['model']})")
+    print()
     for point in result["points"]:
         probs = " ".join(f"{k}={v:.2f}" for k, v in point["probabilities"].items())
         print(f"{ICONS[point['verdict']]}  {point['label']}   [{probs}]")
         if c := point["citation"]:
-            print(f"      ↳ {c['id']} ({c['probability']:.2f}) « {c['text'][:220]}{'…' if len(c['text']) > 220 else ''} »")
+            excerpt = f"{c['text'][:220]}{'…' if len(c['text']) > 220 else ''}"
+            print(f"      ↳ {Path(c['url']).name} {c['id']} ({c['probability']:.2f}) « {excerpt} »")
     print()

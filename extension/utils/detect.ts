@@ -8,7 +8,18 @@ const MAX_SENTENCE_LENGTH = 400;
 
 export interface ConsentSpot {
   termsUrl: string;
+  privacyUrl: string | null;
   anchor: Element;
+}
+
+function withoutHash(href: string): string {
+  const url = new URL(href);
+  url.hash = '';
+  return url.href;
+}
+
+function isPrivacyLink(link: HTMLAnchorElement): boolean {
+  return PRIVACY.test(link.textContent ?? '') || PRIVACY.test(link.pathname);
 }
 
 function isTermsLink(link: HTMLAnchorElement): boolean {
@@ -32,9 +43,14 @@ export function findConsentSpot(root: ParentNode = document): ConsentSpot | null
     if (!link.href.startsWith('http') || !isTermsLink(link)) continue;
     const sentence = acceptanceSentenceOf(link);
     if (sentence) {
-      const termsUrl = new URL(link.href);
-      termsUrl.hash = '';
-      return { termsUrl: termsUrl.href, anchor: sentence };
+      const privacy = [...sentence.querySelectorAll<HTMLAnchorElement>('a[href]')].find(
+        (other) => other.href.startsWith('http') && isPrivacyLink(other),
+      );
+      return {
+        termsUrl: withoutHash(link.href),
+        privacyUrl: privacy ? withoutHash(privacy.href) : null,
+        anchor: sentence,
+      };
     }
   }
   return null;

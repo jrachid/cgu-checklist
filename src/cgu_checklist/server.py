@@ -2,9 +2,9 @@ import hashlib
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from cgu_checklist import DocumentTooLong, analyze, extract
+from cgu_checklist import DocumentTooLong, analyze, combine, extract
 
 HOST = "127.0.0.1"
 PORT = 8787
@@ -13,23 +13,34 @@ app = FastAPI(title="cgu-checklist")
 cache: dict[str, dict] = {}
 
 
-class AnalyzeRequest(BaseModel):
+class Document(BaseModel):
     url: str
     html: str
 
 
-@app.post("/analyze")
-def analyze_page(request: AnalyzeRequest) -> dict:
-    text = extract(request.html)
+class AnalyzeRequest(BaseModel):
+    documents: list[Document] = Field(min_length=1)
+
+
+def analyze_cached(document: Document) -> dict | None:
+    text = extract(document.html)
     if not text:
-        raise HTTPException(422, "Aucun texte exploitable dans cette page")
+        return None
     key = hashlib.sha256(text.encode()).hexdigest()
     if key not in cache:
         try:
             cache[key] = analyze(text)
         except DocumentTooLong as e:
-            raise HTTPException(413, f"Document trop long pour une seule requête ({e})") from e
-    return {"url": request.url, **cache[key]}
+            raise HTTPException(413, f"Document trop long pour une seule requête : {document.url} ({e})") from e
+    return cache[key]
+
+
+@app.post("/analyze")
+def analyze_pages(request: AnalyzeRequest) -> dict:
+    analyses = [(doc.url, analysis) for doc in request.documents if (analysis := analyze_cached(doc))]
+    if not analyses:
+        raise HTTPException(422, "Aucun texte exploitable dans ces pages")
+    return combine(analyses)
 
 
 def main() -> None:

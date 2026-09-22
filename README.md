@@ -22,6 +22,7 @@ L'analyse repose sur [Jev](https://docs.typesafe.ai), le modèle de TypeSafe. Je
 1. Le texte est extrait de la page (avec [trafilatura](https://trafilatura.readthedocs.io)), puis découpé en paragraphes numérotés `P000`, `P001`… Chaque titre d'article est rattaché au paragraphe qui le suit.
 2. Chaque point de la check-list donne lieu à deux questions : la réponse (oui, non explicitement, non mentionné) et le paragraphe qui la justifie.
 3. Les 16 questions partent dans **une seule requête** : Jev les évalue en parallèle, en 3 secondes environ, pour à peu près 0,001 $ par document.
+4. Quand plusieurs documents sont fournis, typiquement les CGU et la politique de confidentialité, chacun est analysé à part ; pour chaque point, on garde le document qui y répond le plus nettement, et deux réponses opposées donnent ⚠️.
 
 | Symbole | Signification |
 | --- | --- |
@@ -43,22 +44,23 @@ export TYPESAFE_API_KEY=...
 uv run cgu-checklist https://www.deezer.com/legal/cgu
 ```
 
-Un fichier texte local fonctionne aussi, ce qui est utile pour les sites qui bloquent les téléchargements automatiques :
+Un fichier texte local fonctionne aussi, ce qui est utile pour les sites qui bloquent les téléchargements automatiques. Plusieurs sources se combinent en une seule check-list :
 
 ```bash
 uv run cgu-checklist cgu.txt
+uv run cgu-checklist https://typesafe.ai/legal/terms https://typesafe.ai/legal/privacy-policy
 ```
 
 ## Limites connues
 
-- **Les données personnelles sont souvent ailleurs.** Beaucoup de services décrivent l'usage des données dans une politique de confidentialité séparée, que l'outil ne lit pas encore : ces points ressortent alors « non mentionné ».
+- **Les données personnelles sont souvent ailleurs.** L'extension lit la politique de confidentialité seulement si son lien figure dans la phrase d'acceptation ; sinon, les points sur les données ressortent « non mentionné ».
 - **Le français est une langue secondaire pour Jev**, entraîné surtout en anglais. Les questions sont posées en anglais sur un texte français ; les résultats sont à valider sur davantage de documents.
 - **Les documents très longs**, au-delà de ce que Jev accepte en une requête (environ 32 000 tokens, soit 20 000 à 25 000 mots), sont refusés plutôt que découpés.
 - Plusieurs sites (BlaBlaCar, Vinted, Doctolib) refusent les téléchargements automatiques.
 
 ## L'extension Chrome
 
-L'extension, construite avec [WXT](https://wxt.dev), repère un lien vers des CGU placé dans une phrase d'acceptation (« J'accepte les conditions… », « En vous inscrivant, vous acceptez… ») et affiche la check-list juste en dessous. Un clic sur un point déplie la clause citée ; « Voir la clause » ouvre les CGU directement surlignées sur ce passage.
+L'extension, construite avec [WXT](https://wxt.dev), repère un lien vers des CGU placé dans une phrase d'acceptation (« J'accepte les conditions… », « En vous inscrivant, vous acceptez… ») et affiche la check-list juste en dessous. Si la même phrase renvoie à la politique de confidentialité, celle-ci est analysée avec les CGU. Un clic sur un point déplie la clause citée ; « Voir la clause » ouvre les CGU directement surlignées sur ce passage.
 
 La page des CGU est téléchargée par le navigateur, ce qui évite les blocages rencontrés depuis un serveur. Son HTML est envoyé au serveur d'analyse local, qui seul détient la clé d'API.
 
