@@ -1,0 +1,108 @@
+:host {
+  all: initial;
+  --ink: #1f2328;
+  --muted: #656d76;
+  --line: #d0d7de;
+  --paper: #ffffff;
+  --soft: #f6f8fa;
+  --accent: #0969da;
+  --error: #cf222e;
+}
+
+.panel {
+  box-sizing: border-box;
+  max-width: 480px;
+  margin: 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  box-shadow: 0 4px 12px rgb(31 35 40 / 8%);
+  text-align: left;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--soft);
+  border-radius: 8px 8px 0 0;
+}
+
+.close {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.body {
+  padding: 6px 12px 10px;
+  color: var(--muted);
+}
+
+.point {
+  display: block;
+  padding: 5px 0;
+  color: var(--ink);
+  border-bottom: 1px solid var(--soft);
+}
+
+summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+summary .label {
+  text-decoration: underline dotted var(--muted);
+  text-underline-offset: 3px;
+}
+
+.icon {
+  display: inline-block;
+  width: 22px;
+}
+
+.not_mentioned .label {
+  color: var(--muted);
+}
+
+blockquote {
+  margin: 6px 0 4px 22px;
+  padding: 6px 10px;
+  border-left: 3px solid var(--line);
+  background: var(--soft);
+  color: var(--ink);
+  max-height: 160px;
+  overflow: auto;
+}
+
+.source {
+  margin-left: 22px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.source:hover {
+  text-decoration: underline;
+}
+
+.legend {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.error {
+  margin: 6px 0;
+  color: var(--error);
+}

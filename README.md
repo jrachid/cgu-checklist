@@ -56,9 +56,25 @@ uv run cgu-checklist cgu.txt
 - **Les documents très longs** (au-delà de 30 000 tokens environ) sont refusés plutôt que découpés.
 - Plusieurs sites (BlaBlaCar, Vinted, Doctolib) refusent les téléchargements automatiques.
 
-## Suite prévue
+## L'extension Chrome
 
-Une extension Chrome qui détecte la case « J'accepte les CGU » et affiche la check-list juste à côté, la clé d'API restant sur un serveur.
+L'extension, construite avec [WXT](https://wxt.dev), repère un lien vers des CGU placé dans une phrase d'acceptation (« J'accepte les conditions… », « En vous inscrivant, vous acceptez… ») et affiche la check-list juste en dessous. Un clic sur un point déplie la clause citée ; « Voir la clause » ouvre les CGU directement surlignées sur ce passage.
+
+La page des CGU est téléchargée par le navigateur, ce qui évite les blocages rencontrés depuis un serveur. Son HTML est envoyé au serveur d'analyse local, qui seul détient la clé d'API.
+
+```bash
+# 1. le serveur d'analyse, sur http://127.0.0.1:8787
+uv run cgu-checklist-server
+
+# 2. l'extension, dans un Chrome de développement qui la recharge à chaque modification
+cd extension
+npm install
+npm run dev
+```
+
+Pour l'installer dans son propre Chrome : `npm run build`, puis `chrome://extensions` → « Mode développeur » → « Charger l'extension non empaquetée » → dossier `extension/.output/chrome-mv3`.
+
+Le dossier `extension/fixtures` contient des pages d'inscription de test : `python3 -m http.server 8788 -d extension/fixtures`, puis ouvrir `http://127.0.0.1:8788/signup.html`.
 
 ## Licence
 
